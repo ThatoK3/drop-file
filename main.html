@@ -1,0 +1,1821 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FeatureFlow IDE</title>
+<link href="https://fonts.googleapis.com/css2?family=Berkeley+Mono:wght@400;700&family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!-- CodeMirror -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/shell/shell.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+<!-- JSZip for export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/*───────────────────────────────────────────────
+  VARIABLES
+───────────────────────────────────────────────*/
+:root {
+  --bg0:#0d1117; --bg1:#161b22; --bg2:#1c2128; --bg3:#21262d; --bg4:#30363d;
+  --border:rgba(240,246,252,.10); --border-hi:rgba(240,246,252,.20);
+  --orange:#f97316; --orange-d:rgba(249,115,22,.15); --orange-g:rgba(249,115,22,.3);
+  --blue:#58a6ff;  --green:#3fb950; --red:#f85149;
+  --yellow:#e3b341; --purple:#bc8cff; --cyan:#39d0d8;
+  --t0:#e6edf3; --t1:#8b949e; --t2:#484f58;
+  --sidebar:230px; --toolbar:46px; --tab:34px; --status:22px;
+  --mono:'Berkeley Mono','JetBrains Mono',monospace;
+  --ui:'Geist',-apple-system,sans-serif;
+  --r:6px; --shadow:0 16px 48px rgba(0,0,0,.6);
+}
+[data-theme=light]{
+  --bg0:#f6f8fa; --bg1:#fff; --bg2:#f6f8fa; --bg3:#eaeef2; --bg4:#d0d7de;
+  --border:rgba(31,35,40,.12); --border-hi:rgba(31,35,40,.24);
+  --t0:#1f2328; --t1:#57606a; --t2:#8c959f;
+  --shadow:0 8px 32px rgba(0,0,0,.12);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;font-family:var(--ui);font-size:13px;background:var(--bg0);color:var(--t0)}
+button{font-family:var(--ui);cursor:pointer}
+input,select,textarea{font-family:var(--ui)}
+
+/*───────────────────────────────────────────────
+  LAYOUT
+───────────────────────────────────────────────*/
+.app{display:flex;flex-direction:column;height:100vh}
+.body{display:flex;flex:1;min-height:0;overflow:hidden}
+
+/*───────────────────────────────────────────────
+  TOOLBAR
+───────────────────────────────────────────────*/
+.toolbar{
+  height:var(--toolbar);background:var(--bg1);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:8px;
+  flex-shrink:0;z-index:100;
+}
+.tb-brand{display:flex;align-items:center;gap:8px;flex-shrink:0;margin-right:4px}
+.tb-logo{
+  width:28px;height:28px;border-radius:6px;
+  background:linear-gradient(135deg,var(--orange),#c2410c);
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+  box-shadow:0 0 10px var(--orange-g);
+}
+.tb-title{font-size:14px;font-weight:700;
+  background:linear-gradient(90deg,var(--orange),#fbbf24);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.tb-project{font-size:10px;color:var(--t2)}
+.tb-sep{width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px}
+.tb-group{display:flex;align-items:center;gap:4px}
+.tb-btn{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:var(--r);
+  border:1px solid var(--border);background:var(--bg3);
+  color:var(--t0);font-size:11px;font-weight:500;
+  transition:all .14s;white-space:nowrap;
+}
+.tb-btn:hover{border-color:var(--border-hi);background:var(--bg4)}
+.tb-btn.primary{background:var(--orange);border-color:var(--orange);color:#fff}
+.tb-btn.primary:hover{background:#ea580c;border-color:#ea580c}
+.tb-btn.unsaved{border-color:var(--orange);color:var(--orange)}
+.tb-btn:disabled{opacity:.4;pointer-events:none}
+.tb-icon{
+  width:28px;height:28px;border-radius:var(--r);border:none;
+  background:none;color:var(--t1);
+  display:flex;align-items:center;justify-content:center;font-size:13px;
+  transition:all .14s;
+}
+.tb-icon:hover{background:var(--bg3);color:var(--t0)}
+.tb-spacer{flex:1}
+
+/*───────────────────────────────────────────────
+  SIDEBAR
+───────────────────────────────────────────────*/
+.sidebar{
+  width:var(--sidebar);background:var(--bg1);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;flex-shrink:0;
+  overflow:hidden;
+}
+.sb-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 10px 5px;flex-shrink:0;
+}
+.sb-title{font-size:10px;font-weight:700;letter-spacing:1.2px;color:var(--t2);text-transform:uppercase}
+.sb-acts{display:flex;gap:2px}
+.sb-search{padding:0 8px 6px;flex-shrink:0}
+.sb-search input{
+  width:100%;padding:5px 8px;background:var(--bg3);
+  border:1px solid var(--border);border-radius:var(--r);
+  color:var(--t0);font-size:11px;outline:none;transition:border-color .14s;
+}
+.sb-search input:focus{border-color:var(--orange)}
+.sb-search input::placeholder{color:var(--t2)}
+.file-tree{flex:1;overflow-y:auto;padding-bottom:8px}
+.file-tree::-webkit-scrollbar{width:3px}
+.file-tree::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+
+/* tree nodes */
+.tree-sec{margin-top:2px}
+.tree-sec-hdr{
+  display:flex;align-items:center;gap:5px;
+  padding:5px 10px 3px;cursor:pointer;user-select:none;
+  color:var(--t2);font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+  transition:color .12s;
+}
+.tree-sec-hdr:hover{color:var(--t1)}
+.tree-chev{font-size:9px;transition:transform .14s;flex-shrink:0}
+.tree-sec.closed .tree-chev{transform:rotate(-90deg)}
+.tree-sec.closed .tree-body{display:none}
+.tree-badge{margin-left:auto;font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;color:var(--t2);background:var(--bg3)}
+.tree-badge.demo{color:var(--orange);background:var(--orange-d)}
+
+.tree-node{
+  display:flex;align-items:center;height:26px;padding:0 8px 0 10px;
+  cursor:pointer;color:var(--t1);font-size:12px;
+  transition:background .1s,color .1s;position:relative;user-select:none;
+}
+.tree-node:hover{background:var(--bg3);color:var(--t0)}
+.tree-node.active{background:var(--orange-d);color:var(--orange);border-right:2px solid var(--orange)}
+.tree-icon{font-size:12px;flex-shrink:0;width:18px;text-align:center;opacity:.75}
+.tree-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;padding:0 3px}
+.tree-acts{display:none;align-items:center;gap:1px;flex-shrink:0}
+.tree-node:hover .tree-acts{display:flex}
+.tree-act{
+  width:17px;height:17px;border-radius:3px;background:none;border:none;
+  color:var(--t2);display:flex;align-items:center;justify-content:center;
+  font-size:10px;transition:all .1s;
+}
+.tree-act:hover{color:var(--t0);background:var(--bg4)}
+.tree-act.del:hover{color:var(--red)}
+.tree-node.demo .tree-name{font-style:italic;opacity:.8}
+.demo-rm{
+  margin:6px 8px 2px;padding:5px 10px;width:calc(100% - 16px);
+  background:none;border:1px dashed rgba(249,115,22,.3);
+  border-radius:var(--r);color:var(--orange);
+  font-size:11px;transition:all .14s;text-align:center;display:block;
+}
+.demo-rm:hover{background:var(--orange-d);border-color:var(--orange)}
+
+/*───────────────────────────────────────────────
+  EDITOR COLUMN
+───────────────────────────────────────────────*/
+.editor-col{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+
+/* tabs */
+.tab-bar{
+  height:var(--tab);background:var(--bg1);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:stretch;flex-shrink:0;
+}
+.tabs{display:flex;flex:1;overflow-x:auto;overflow-y:hidden}
+.tabs::-webkit-scrollbar{display:none}
+.tab-bar-end{display:flex;align-items:center;padding:0 6px;border-left:1px solid var(--border);gap:4px;flex-shrink:0}
+.tab{
+  display:flex;align-items:center;gap:6px;padding:0 12px;
+  border-right:1px solid var(--border);font-size:11px;color:var(--t1);
+  cursor:pointer;white-space:nowrap;transition:color .12s,background .12s;
+  position:relative;flex-shrink:0;border-bottom:2px solid transparent;user-select:none;
+}
+.tab:hover{color:var(--t0);background:var(--bg2)}
+.tab.active{color:var(--t0);background:var(--bg0);border-bottom-color:var(--orange)}
+.tab-icon{font-size:11px;opacity:.7}
+.tab-dot{width:6px;height:6px;border-radius:50%;background:var(--orange);flex-shrink:0}
+.tab-x{
+  width:15px;height:15px;border-radius:3px;background:none;border:none;
+  color:inherit;display:flex;align-items:center;justify-content:center;
+  font-size:13px;opacity:0;transition:opacity .12s;padding:0;line-height:1;
+}
+.tab:hover .tab-x,.tab.active .tab-x{opacity:.6}
+.tab-x:hover{opacity:1 !important;color:var(--red)}
+
+/* editor pane */
+.editor-pane{flex:1;display:flex;overflow:hidden;min-height:0;position:relative}
+
+/* welcome */
+.welcome{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;padding:40px;color:var(--t2);user-select:none;
+}
+.welcome-logo{font-size:44px;opacity:.4}
+.welcome-h{font-size:20px;font-weight:700;color:var(--t1)}
+.welcome-sub{font-size:12px;color:var(--t2)}
+.welcome-keys{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;justify-content:center}
+.wkey{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2)}
+kbd{background:var(--bg3);border:1px solid var(--border-hi);border-radius:4px;padding:2px 6px;font-family:var(--mono);font-size:10px;color:var(--t1)}
+
+/* code editor */
+.editor-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.CodeMirror{
+  flex:1;height:100% !important;
+  font-family:var(--mono) !important;font-size:14px;line-height:1.65;
+  background:var(--bg0) !important;
+}
+[data-theme=light] .CodeMirror{background:#fff !important}
+.CodeMirror-scroll{overflow:auto !important}
+.CodeMirror-gutters{background:var(--bg1) !important;border-right:1px solid var(--border) !important}
+[data-theme=light] .CodeMirror-gutters{background:var(--bg2) !important}
+.CodeMirror-linenumber{color:var(--t2) !important;padding:0 8px 0 4px}
+.CodeMirror-activeline-background{background:rgba(255,255,255,.03) !important}
+[data-theme=light] .CodeMirror-activeline-background{background:rgba(0,0,0,.03) !important}
+.CodeMirror-selected{background:rgba(249,115,22,.18) !important}
+.CodeMirror-cursor{border-left-color:var(--orange) !important}
+
+/*───────────────────────────────────────────────
+  MARKDOWN PANE  (split view for .md files)
+───────────────────────────────────────────────*/
+.md-split{flex:1;display:flex;overflow:hidden;min-height:0}
+.md-editor-side{flex:1;display:flex;flex-direction:column;border-right:1px solid var(--border);min-width:0}
+.md-preview-side{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg0)}
+.md-pane-header{
+  height:30px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 12px;background:var(--bg1);border-bottom:1px solid var(--border);
+  flex-shrink:0;font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--t2);
+  text-transform:uppercase;
+}
+.md-preview{
+  flex:1;overflow-y:auto;padding:24px 28px;
+  font-family:var(--ui);font-size:14px;line-height:1.75;color:var(--t0);
+}
+.md-preview::-webkit-scrollbar{width:4px}
+.md-preview::-webkit-scrollbar-thumb{background:var(--bg4)}
+/* Markdown rendered styles */
+.md-preview h1{font-size:26px;font-weight:700;margin:0 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border);color:var(--t0)}
+.md-preview h2{font-size:20px;font-weight:700;margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);color:var(--t0)}
+.md-preview h3{font-size:16px;font-weight:600;margin:20px 0 8px;color:var(--t0)}
+.md-preview h4{font-size:14px;font-weight:600;margin:16px 0 6px;color:var(--t0)}
+.md-preview p{margin:0 0 14px;color:var(--t1)}
+.md-preview a{color:var(--blue);text-decoration:none}
+.md-preview a:hover{text-decoration:underline}
+.md-preview ul,.md-preview ol{margin:0 0 14px 22px;color:var(--t1)}
+.md-preview li{margin-bottom:4px}
+.md-preview code{font-family:var(--mono);font-size:12px;background:var(--bg3);padding:2px 6px;border-radius:4px;color:var(--cyan)}
+.md-preview pre{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin:0 0 16px;overflow-x:auto}
+.md-preview pre code{background:none;padding:0;color:var(--t0);font-size:12px}
+.md-preview blockquote{border-left:3px solid var(--orange);padding:8px 14px;margin:0 0 14px;background:var(--orange-d);border-radius:0 var(--r) var(--r) 0;color:var(--t1)}
+.md-preview table{width:100%;border-collapse:collapse;margin:0 0 16px;font-size:13px}
+.md-preview th{background:var(--bg3);padding:8px 12px;text-align:left;border:1px solid var(--border);font-weight:600}
+.md-preview td{padding:7px 12px;border:1px solid var(--border);color:var(--t1)}
+.md-preview tr:hover td{background:var(--bg2)}
+.md-preview hr{border:none;border-top:1px solid var(--border);margin:20px 0}
+.md-preview img{max-width:100%;border-radius:var(--r)}
+.md-preview strong{font-weight:600;color:var(--t0)}
+.md-preview em{color:var(--t1);font-style:italic}
+.md-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--t2);font-size:13px;font-style:italic}
+
+/*───────────────────────────────────────────────
+  STATUS BAR
+───────────────────────────────────────────────*/
+.status-bar{
+  height:var(--status);background:var(--orange);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 10px;flex-shrink:0;font-size:11px;color:#fff;font-weight:500;
+}
+.status-l,.status-r{display:flex;align-items:center;gap:8px}
+.status-sep{opacity:.6}
+
+/*───────────────────────────────────────────────
+  TERMINAL
+───────────────────────────────────────────────*/
+.terminal{
+  flex-shrink:0;background:#0d1117;border-top:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+  transition:height .2s ease;
+}
+[data-theme=light] .terminal{background:var(--bg2)}
+.term-bar{
+  height:30px;background:var(--bg1);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;
+}
+.term-tabs{display:flex;flex:1;gap:2px}
+.term-tab{
+  padding:3px 10px;border-radius:4px;background:none;border:none;
+  font-size:10px;font-weight:700;letter-spacing:.7px;color:var(--t2);
+  transition:all .12s;text-transform:uppercase;
+}
+.term-tab:hover{color:var(--t1)}
+.term-tab.active{color:var(--orange);background:var(--orange-d)}
+.term-bar-end{display:flex;gap:3px}
+.term-body{flex:1;display:flex;flex-direction:column;padding:8px 12px;overflow:hidden}
+.term-out{
+  flex:1;overflow-y:auto;font-family:var(--mono);font-size:12px;
+  color:#cdd9e5;line-height:1.6;
+}
+.term-out::-webkit-scrollbar{width:3px}
+.term-out::-webkit-scrollbar-thumb{background:var(--bg4)}
+.tl{display:block}
+.tl.info{color:var(--cyan)} .tl.ok{color:var(--green)} .tl.err{color:var(--red)}
+.tl.warn{color:var(--yellow)} .tl.dim{color:var(--t2)} .tl.cmd{color:var(--orange)}
+.term-inp-row{display:flex;align-items:center;gap:8px;margin-top:5px;flex-shrink:0}
+.term-ps{color:var(--green);font-family:var(--mono);font-size:12px;font-weight:700}
+.term-inp{
+  flex:1;background:none;border:none;color:var(--t0);
+  font-family:var(--mono);font-size:12px;outline:none;caret-color:var(--orange);
+}
+
+/*───────────────────────────────────────────────
+  MODALS
+───────────────────────────────────────────────*/
+.overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);
+  backdrop-filter:blur(6px);display:none;
+  align-items:center;justify-content:center;z-index:900;padding:20px;
+}
+.overlay.show{display:flex}
+.modal{
+  background:var(--bg1);border:1px solid var(--border-hi);border-radius:12px;
+  width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:var(--shadow);animation:mIn .18s ease;
+}
+@keyframes mIn{from{opacity:0;transform:scale(.97) translateY(-8px)}to{opacity:1;transform:none}}
+.modal-sm{max-width:420px} .modal-md{max-width:560px} .modal-lg{max-width:740px} .modal-xl{max-width:900px}
+.modal-head{
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.modal-title{font-size:15px;font-weight:600}
+.modal-close{
+  width:26px;height:26px;border-radius:5px;border:none;
+  background:var(--bg3);color:var(--t1);font-size:16px;
+  display:flex;align-items:center;justify-content:center;transition:all .12s;
+}
+.modal-close:hover{background:var(--red);color:#fff}
+.modal-body{padding:20px;overflow-y:auto;flex:1}
+.modal-body::-webkit-scrollbar{width:4px}
+.modal-body::-webkit-scrollbar-thumb{background:var(--bg4)}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:16px 20px;border-top:1px solid var(--border);flex-shrink:0}
+
+/*───────────────────────────────────────────────
+  FORMS
+───────────────────────────────────────────────*/
+.fg{margin-bottom:14px}
+.fg:last-child{margin-bottom:0}
+.fl{display:block;font-size:11px;font-weight:600;color:var(--t1);margin-bottom:5px}
+.fh{font-size:10px;color:var(--t2);margin-top:4px}
+.fi,.fs,.fta{
+  width:100%;padding:8px 11px;background:var(--bg3);
+  border:1px solid var(--border);border-radius:var(--r);
+  color:var(--t0);font-size:13px;outline:none;transition:border-color .14s;
+}
+.fi:focus,.fs:focus,.fta:focus{border-color:var(--orange);box-shadow:0 0 0 3px var(--orange-d)}
+.fi::placeholder{color:var(--t2)}
+.frow{display:flex;gap:12px}
+.frow .fg{flex:1}
+.fta{resize:vertical;min-height:80px;font-family:var(--mono);font-size:12px}
+
+/*───────────────────────────────────────────────
+  BUTTONS
+───────────────────────────────────────────────*/
+.btn{
+  padding:7px 16px;border-radius:var(--r);border:1px solid var(--border);
+  background:var(--bg3);color:var(--t0);font-size:12px;font-weight:500;
+  display:inline-flex;align-items:center;gap:6px;transition:all .14s;
+}
+.btn:hover{border-color:var(--border-hi);background:var(--bg4)}
+.btn.prim{background:var(--orange);border-color:var(--orange);color:#fff}
+.btn.prim:hover{background:#ea580c;border-color:#ea580c;box-shadow:0 4px 14px var(--orange-g)}
+.btn.danger{background:rgba(248,81,73,.12);border-color:rgba(248,81,73,.35);color:var(--red)}
+.btn.danger:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.btn.ghost{background:none;border-color:transparent;color:var(--t1)}
+.btn.ghost:hover{background:var(--bg3);color:var(--t0);border-color:var(--border)}
+.icon-btn{
+  width:24px;height:24px;border-radius:4px;border:none;
+  background:none;color:var(--t2);
+  display:flex;align-items:center;justify-content:center;transition:all .12s;
+}
+.icon-btn:hover{color:var(--t0);background:var(--bg3)}
+
+/*───────────────────────────────────────────────
+  TOAST
+───────────────────────────────────────────────*/
+.toasts{position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;gap:7px;z-index:9999;pointer-events:none}
+.toast{
+  display:flex;align-items:center;gap:9px;padding:9px 13px;
+  border-radius:8px;background:var(--bg2);border:1px solid var(--border-hi);
+  font-size:12px;color:var(--t0);box-shadow:var(--shadow);
+  animation:tIn .2s ease;max-width:300px;
+}
+.toast.ok{border-color:rgba(63,185,80,.4)} .toast.err{border-color:rgba(248,81,73,.4)} .toast.info{border-color:rgba(88,166,255,.35)}
+@keyframes tIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+@keyframes tOut{from{opacity:1}to{opacity:0;transform:translateX(10px)}}
+
+/*───────────────────────────────────────────────
+  FILE CARD (in Create ZIP preview)
+───────────────────────────────────────────────*/
+.zip-file-list{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;padding:2px}
+.zip-file-list::-webkit-scrollbar{width:4px}
+.zip-file-list::-webkit-scrollbar-thumb{background:var(--bg4)}
+.zip-item{
+  display:flex;align-items:center;gap:10px;padding:8px 12px;
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+  font-size:12px;
+}
+.zip-item-path{flex:1;font-family:var(--mono);font-size:11px;color:var(--t1)}
+.zip-item-size{color:var(--t2);font-size:10px;flex-shrink:0}
+.zip-item-check{flex-shrink:0;accent-color:var(--orange)}
+
+/* JSON store tabs */
+.store-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.store-tab{
+  padding:5px 12px;border-radius:20px;border:1px solid var(--border);
+  font-size:11px;font-weight:500;background:var(--bg3);color:var(--t1);transition:all .14s;
+}
+.store-tab:hover{border-color:var(--border-hi);color:var(--t0)}
+.store-tab.active{background:var(--orange-d);border-color:var(--orange);color:var(--orange)}
+
+/* scrollbars global */
+*{scrollbar-width:thin;scrollbar-color:var(--bg4) transparent}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ══ TOOLBAR ══════════════════════════════════════════════════ -->
+<div class="toolbar">
+  <div class="tb-brand">
+    <div class="tb-logo">⚡</div>
+    <div>
+      <div class="tb-title">FeatureFlow IDE</div>
+      <div class="tb-project" id="tbProject">my-pipeline</div>
+    </div>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-group">
+    <button class="tb-btn" id="saveBtn" onclick="saveFile()" disabled title="Ctrl+S">
+      💾 Save
+    </button>
+    <button class="tb-btn" onclick="openModal('newFileModal')" title="New file">
+      ＋ New File
+    </button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-group">
+    <button class="tb-btn" onclick="openModal('zipModal')" title="Export files as ZIP">
+      📦 Create ZIP
+    </button>
+    <button class="tb-btn" onclick="openModal('storeModal')" title="View / edit raw JSON stores">
+      🗄 JSON Stores
+    </button>
+  </div>
+
+  <div class="tb-spacer"></div>
+
+  <div class="tb-group">
+    <button class="tb-icon" onclick="toggleTerminal()" title="Terminal  Ctrl+`">⬛</button>
+    <button class="tb-icon" onclick="toggleTheme()" id="themeBtn" title="Toggle theme">☀️</button>
+    <button class="tb-icon" onclick="openModal('settingsModal')" title="Settings">⚙️</button>
+  </div>
+</div>
+
+<!-- ══ BODY ════════════════════════════════════════════════════= -->
+<div class="body">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sb-head">
+      <span class="sb-title">Explorer</span>
+      <div class="sb-acts">
+        <button class="icon-btn" onclick="openModal('newFileModal')" title="New file">＋</button>
+        <button class="icon-btn" onclick="refreshTree()" title="Refresh">↻</button>
+      </div>
+    </div>
+    <div class="sb-search">
+      <input id="sbSearch" placeholder="Filter files…" oninput="filterTree(this.value)">
+    </div>
+    <div class="file-tree" id="fileTree"></div>
+  </div>
+
+  <!-- EDITOR COLUMN -->
+  <div class="editor-col">
+
+    <!-- TABS -->
+    <div class="tab-bar">
+      <div class="tabs" id="tabList"></div>
+      <div class="tab-bar-end">
+        <button class="icon-btn" onclick="closeAllTabs()" title="Close all">✕</button>
+      </div>
+    </div>
+
+    <!-- EDITOR PANE -->
+    <div class="editor-pane" id="editorPane">
+      <!-- Welcome -->
+      <div class="welcome" id="welcome">
+        <div class="welcome-logo">⚡</div>
+        <div class="welcome-h">Pipeline IDE</div>
+        <div class="welcome-sub">Open a file from the explorer or create a new one</div>
+        <div class="welcome-keys">
+          <div class="wkey"><kbd>Ctrl S</kbd> Save</div>
+          <div class="wkey"><kbd>Ctrl /</kbd> Comment</div>
+          <div class="wkey"><kbd>Ctrl `</kbd> Terminal</div>
+          <div class="wkey"><kbd>Ctrl W</kbd> Close tab</div>
+        </div>
+      </div>
+      <!-- Code editor (hidden until file opened) -->
+      <div class="editor-wrap" id="editorWrap" style="display:none">
+        <textarea id="codeEditor"></textarea>
+      </div>
+      <!-- Markdown split view (hidden until .md file opened) -->
+      <div class="md-split" id="mdSplit" style="display:none">
+        <div class="md-editor-side">
+          <div class="md-pane-header">
+            <span>Edit</span>
+            <button class="btn ghost" style="font-size:10px;padding:2px 8px" onclick="syncMdPreview()">⟳ Sync</button>
+          </div>
+          <div style="flex:1;display:flex;overflow:hidden">
+            <textarea id="mdEditor"></textarea>
+          </div>
+        </div>
+        <div class="md-preview-side">
+          <div class="md-pane-header"><span>Preview</span></div>
+          <div class="md-preview" id="mdPreview"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div class="status-bar" id="statusBar" style="display:none">
+      <div class="status-l">
+        <span id="statusLang">Python</span>
+        <span class="status-sep">·</span>
+        <span id="statusPath">—</span>
+      </div>
+      <div class="status-r">
+        <span id="cursorPos">Ln 1, Col 1</span>
+        <span class="status-sep">·</span>
+        <span>UTF-8</span>
+      </div>
+    </div>
+
+    <!-- TERMINAL -->
+    <div class="terminal" id="terminal" style="display:none;height:210px">
+      <div class="term-bar">
+        <div class="term-tabs">
+          <button class="term-tab active" data-tab="terminal" onclick="switchTermTab('terminal')">Terminal</button>
+          <button class="term-tab" data-tab="output" onclick="switchTermTab('output')">Output</button>
+        </div>
+        <div class="term-bar-end">
+          <button class="icon-btn" onclick="clearTerm()" title="Clear">🗑</button>
+          <button class="icon-btn" onclick="toggleTerminal()" title="Close">✕</button>
+        </div>
+      </div>
+      <div class="term-body">
+        <div class="term-out" id="termOut"></div>
+        <div class="term-inp-row">
+          <span class="term-ps">$</span>
+          <input class="term-inp" id="termInp" autocomplete="off" spellcheck="false" onkeydown="handleTermKey(event)">
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /editor-col -->
+</div><!-- /body -->
+</div><!-- /app -->
+
+<!-- ═══════════ MODALS ══════════════════════════════════════════ -->
+
+<!-- NEW FILE -->
+<div class="overlay" id="newFileModal">
+<div class="modal modal-md">
+  <div class="modal-head">
+    <span class="modal-title">New File</span>
+    <button class="modal-close" onclick="closeModal('newFileModal')">×</button>
+  </div>
+  <div class="modal-body">
+    <div class="frow">
+      <div class="fg">
+        <label class="fl">Folder</label>
+        <select class="fs" id="nfFolder">
+          <option value="">— root —</option>
+          <option value="pipelines">pipelines</option>
+          <option value="feast">feast</option>
+          <option value="config">config</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl">File Name</label>
+        <input class="fi" id="nfName" placeholder="my_script.py" onkeydown="if(event.key==='Enter')createFile()">
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fl">Template</label>
+      <select class="fs" id="nfTpl">
+        <option value="empty">Empty</option>
+        <option value="python">Python Script</option>
+        <option value="pipeline">Pipeline (PySpark)</option>
+        <option value="feast_ds">Feast — Data Source</option>
+        <option value="feast_fv">Feast — Feature View</option>
+        <option value="feast_fs">Feast — Feature Service</option>
+        <option value="feast_entity">Feast — Entity</option>
+        <option value="json">JSON Config</option>
+        <option value="yaml">YAML Config</option>
+        <option value="bash">Bash Script</option>
+        <option value="readme">README (Markdown)</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Initial Content <span style="color:var(--t2);font-weight:400">(optional override)</span></label>
+      <textarea class="fta" id="nfContent" placeholder="Leave blank to use template…" style="height:80px"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal('newFileModal')">Cancel</button>
+    <button class="btn prim" onclick="createFile()">Create File</button>
+  </div>
+</div>
+</div>
+
+<!-- DELETE -->
+<div class="overlay" id="deleteModal">
+<div class="modal modal-sm">
+  <div class="modal-head">
+    <span class="modal-title">Delete File</span>
+    <button class="modal-close" onclick="closeModal('deleteModal')">×</button>
+  </div>
+  <div class="modal-body">
+    <p style="color:var(--t1);font-size:13px;line-height:1.6">
+      Delete <strong id="deleteLabel" style="color:var(--t0);font-family:var(--mono)"></strong>?
+      <br><span style="color:var(--t2);font-size:11px">This cannot be undone. The file will be removed from storage.</span>
+    </p>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal('deleteModal')">Cancel</button>
+    <button class="btn danger" onclick="confirmDelete()">Delete</button>
+  </div>
+</div>
+</div>
+
+<!-- CREATE ZIP -->
+<div class="overlay" id="zipModal">
+<div class="modal modal-lg">
+  <div class="modal-head">
+    <span class="modal-title">📦 Create ZIP</span>
+    <button class="modal-close" onclick="closeModal('zipModal')">×</button>
+  </div>
+  <div class="modal-body">
+    <div class="fg">
+      <label class="fl">ZIP File Name</label>
+      <input class="fi" id="zipName" value="my-pipeline.zip">
+    </div>
+    <div class="fg">
+      <label class="fl" style="margin-bottom:8px">Include Files</label>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn ghost" onclick="zipSelectAll(true)" style="font-size:11px;padding:4px 10px">Select All</button>
+        <button class="btn ghost" onclick="zipSelectAll(false)" style="font-size:11px;padding:4px 10px">None</button>
+        <button class="btn ghost" onclick="zipSelectNonDemo()" style="font-size:11px;padding:4px 10px">Non-demo only</button>
+      </div>
+      <div class="zip-file-list" id="zipFileList"></div>
+    </div>
+    <div class="fg">
+      <label class="fl">Include JSON stores</label>
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="zipIncFeast" checked style="accent-color:var(--orange)"> feast.json
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="zipIncConfig" checked style="accent-color:var(--orange)"> config.json
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="zipIncManifest" checked style="accent-color:var(--orange)"> manifest.json
+        </label>
+      </div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal('zipModal')">Cancel</button>
+    <button class="btn prim" onclick="buildZip()">⬇ Download ZIP</button>
+  </div>
+</div>
+</div>
+
+<!-- JSON STORES -->
+<div class="overlay" id="storeModal">
+<div class="modal modal-xl">
+  <div class="modal-head">
+    <span class="modal-title">🗄 JSON Stores</span>
+    <button class="modal-close" onclick="closeModal('storeModal')">×</button>
+  </div>
+  <div class="modal-body">
+    <p style="color:var(--t2);font-size:12px;margin-bottom:14px">
+      Separate JSON files for each domain. Edit directly — changes are saved automatically.
+    </p>
+    <div class="store-tabs" id="storeTabs"></div>
+    <div class="fg">
+      <textarea class="fta" id="storeEditor" style="height:360px;font-size:12px" oninput="storeEditorChanged()"></textarea>
+    </div>
+    <div id="storeError" style="color:var(--red);font-size:11px;margin-top:6px;display:none"></div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal('storeModal')">Close</button>
+    <button class="btn prim" onclick="saveStore()">💾 Save Store</button>
+  </div>
+</div>
+</div>
+
+<!-- SETTINGS -->
+<div class="overlay" id="settingsModal">
+<div class="modal modal-sm">
+  <div class="modal-head">
+    <span class="modal-title">Settings</span>
+    <button class="modal-close" onclick="closeModal('settingsModal')">×</button>
+  </div>
+  <div class="modal-body">
+    <div class="fg">
+      <label class="fl">Font Size</label>
+      <select class="fs" id="sFontSize" onchange="applySetting('fontSize',this.value)">
+        <option value="12">12px</option><option value="13">13px</option>
+        <option value="14" selected>14px</option><option value="15">15px</option>
+        <option value="16">16px</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Tab Size</label>
+      <select class="fs" id="sTabSize" onchange="applySetting('tabSize',this.value)">
+        <option value="2">2 spaces</option><option value="4" selected>4 spaces</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Word Wrap</label>
+      <select class="fs" id="sWrap" onchange="applySetting('wrap',this.value)">
+        <option value="off" selected>Off</option><option value="on">On</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Project Name</label>
+      <input class="fi" id="sProject" placeholder="my-pipeline" onchange="setProjectName(this.value)">
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn prim" onclick="closeModal('settingsModal')">Done</button>
+  </div>
+</div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════
+//  EMBEDDED FILE SYSTEM
+//  All files stored here — no server needed.
+//  Edits go to localStorage; embedded data is the factory default.
+// ═══════════════════════════════════════════════════════════════
+const FACTORY = {
+  project: 'my-pipeline',
+  files: [
+    {id:'p1',folder:'pipelines',name:'etl_main.py',lang:'python',content:`#!/usr/bin/env python3
+"""
+Main ETL Pipeline — reads from source, cleans, writes Parquet to MinIO.
+"""
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.types import DoubleType, TimestampType
+from config.settings import DB, MINIO, SPARK_DEFAULTS
+
+spark = SparkSession.builder.appName("ETLPipeline").master("local[*]")
+for k, v in {**SPARK_DEFAULTS, **MINIO.spark_conf()}.items():
+    spark = spark.config(k, v)
+spark = spark.getOrCreate()
+spark.sparkContext.setLogLevel("WARN")
+
+df = (
+    spark.read.format("jdbc")
+    .options(**DB.jdbc_options("events", fetchsize=10_000))
+    .load()
+)
+print(f"[read]  {df.count():,} rows")
+
+df = (
+    df
+    .filter(F.col("status") != "DELETED")
+    .dropna(subset=["id", "created_at"])
+    .withColumn("amount",     F.col("amount").cast(DoubleType()))
+    .withColumn("created_at", F.col("created_at").cast(TimestampType()))
+    .withColumn("event_date", F.to_date(F.col("created_at")))
+)
+
+out = MINIO.path("output", "events")
+df.write.mode("overwrite").option("compression","snappy").partitionBy("event_date").parquet(out)
+print(f"[write] → {out}")
+spark.stop()
+`},
+    {id:'p2',folder:'pipelines',name:'transform_utils.py',lang:'python',content:`"""Reusable transform helpers."""
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+
+
+def clean_strings(df: DataFrame, *cols: str) -> DataFrame:
+    for c in cols:
+        df = df.withColumn(c, F.trim(F.regexp_replace(F.col(c), r"\\s+", " ")))
+    return df
+
+
+def add_audit(df: DataFrame, source: str = "pipeline") -> DataFrame:
+    return df.withColumn("_loaded_at", F.current_timestamp()).withColumn("_source", F.lit(source))
+
+
+def null_report(df: DataFrame) -> None:
+    total = df.count()
+    for field in df.schema.fields:
+        n = df.filter(F.col(field.name).isNull()).count()
+        print(f"  {field.name:<30} {n:>8,} nulls  ({n/total*100 if total else 0:.1f}%)")
+`},
+    {id:'p3',folder:'pipelines',name:'run.sh',lang:'shell',content:`#!/usr/bin/env bash
+set -euo pipefail
+echo "[INFO] Starting ETL pipeline..."
+python3 pipelines/etl_main.py
+echo "[INFO] Done."
+`},
+    {id:'f1',folder:'feast',name:'data_sources.py',lang:'python',content:`"""Feast — Data Source definitions."""
+from feast import FileSource
+from feast.data_format import ParquetFormat
+
+events_source = FileSource(
+    name="events_source",
+    path="s3a://data-lake/output/events/",
+    file_format=ParquetFormat(),
+    timestamp_field="created_at",
+    created_timestamp_column="created_at",
+    tags={"team": "data-eng", "sla": "daily"},
+)
+
+customers_source = FileSource(
+    name="customers_source",
+    path="s3a://data-lake/output/customers/",
+    file_format=ParquetFormat(),
+    timestamp_field="created_at",
+)
+`},
+    {id:'f2',folder:'feast',name:'feature_views.py',lang:'python',content:`"""Feast — Feature View definitions."""
+from datetime import timedelta
+from feast import Entity, FeatureView, Field
+from feast.types import Float64, Int64, String, Bool
+from .data_sources import events_source, customers_source
+
+user = Entity(name="user", description="Platform user", join_keys=["user_id"])
+
+user_activity = FeatureView(
+    name="user_activity", entities=[user], ttl=timedelta(days=30),
+    schema=[
+        Field(name="event_count",    dtype=Int64),
+        Field(name="last_event_type",dtype=String),
+        Field(name="total_amount",   dtype=Float64),
+        Field(name="is_active",      dtype=Bool),
+    ],
+    online=True, source=events_source, tags={"tier":"silver"},
+)
+
+user_profile = FeatureView(
+    name="user_profile", entities=[user], ttl=timedelta(days=90),
+    schema=[
+        Field(name="country",           dtype=String),
+        Field(name="subscription_plan", dtype=String),
+        Field(name="account_age_days",  dtype=Int64),
+        Field(name="lifetime_value",    dtype=Float64),
+    ],
+    online=True, source=customers_source, tags={"tier":"gold"},
+)
+`},
+    {id:'f3',folder:'feast',name:'feature_services.py',lang:'python',content:`"""Feast — Feature Service definitions."""
+from feast import FeatureService
+from .feature_views import user_activity, user_profile
+
+churn_v1 = FeatureService(
+    name="churn_model_v1",
+    features=[
+        user_activity[["event_count","is_active","total_amount"]],
+        user_profile[["country","subscription_plan"]],
+    ],
+    tags={"model":"churn","version":"1"},
+)
+
+churn_v2 = FeatureService(
+    name="churn_model_v2",
+    features=[user_activity, user_profile],
+    tags={"model":"churn","version":"2"},
+)
+`},
+    {id:'f4',folder:'feast',name:'feature_store.yaml',lang:'yaml',content:`project: my-pipeline
+registry: s3a://data-lake/feast/registry.db
+provider: local
+online_store:
+    type: redis
+    connection_string: "redis:6379"
+offline_store:
+    type: file
+entity_key_serialization_version: 2
+`},
+    {id:'c1',folder:'config',name:'settings.py',lang:'python',content:`"""Centralised settings — loaded from environment variables."""
+import os
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class DBConfig:
+    host:str; port:int; name:str; user:str; password:str; schema:str="public"
+    @property
+    def jdbc_url(self): return f"jdbc:postgresql://{self.host}:{self.port}/{self.name}"
+    def jdbc_options(self, table, fetchsize=10_000):
+        return {"url":self.jdbc_url,"dbtable":f"{self.schema}.{table}","user":self.user,"password":self.password,"fetchsize":str(fetchsize)}
+
+@dataclass(frozen=True)
+class MinIOConfig:
+    endpoint:str; access_key:str; secret_key:str; bucket:str
+    def spark_conf(self):
+        return {"spark.hadoop.fs.s3a.endpoint":self.endpoint,"spark.hadoop.fs.s3a.access.key":self.access_key,
+                "spark.hadoop.fs.s3a.secret.key":self.secret_key,"spark.hadoop.fs.s3a.path.style.access":"true"}
+    def path(self,*parts): return "s3a://"+self.bucket+"/"+"/".join(parts)
+
+DB = DBConfig(
+    host=os.getenv("DB_HOST","localhost"), port=int(os.getenv("DB_PORT","5432")),
+    name=os.getenv("DB_NAME","mydb"), user=os.getenv("DB_USER","etl_user"),
+    password=os.getenv("DB_PASSWORD","secret"),
+)
+MINIO = MinIOConfig(
+    endpoint=os.getenv("MINIO_ENDPOINT","http://minio:9000"),
+    access_key=os.getenv("MINIO_ACCESS_KEY","minioadmin"),
+    secret_key=os.getenv("MINIO_SECRET_KEY","minioadmin"),
+    bucket=os.getenv("MINIO_BUCKET","data-lake"),
+)
+SPARK_DEFAULTS = {
+    "spark.sql.shuffle.partitions": os.getenv("SPARK_PARTITIONS","8"),
+    "spark.executor.memory":        os.getenv("SPARK_EXEC_MEM","2g"),
+}
+`},
+    {id:'c2',folder:'config',name:'.env.example',lang:'shell',content:`# Copy to .env — never commit .env to git
+
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=mydb
+DB_USER=etl_user
+DB_PASSWORD=changeme
+
+MINIO_ENDPOINT=http://minio:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=data-lake
+
+SPARK_PARTITIONS=8
+SPARK_EXEC_MEM=2g
+`},
+    {id:'r1',folder:'',name:'requirements.txt',lang:'text',content:`pyspark==3.5.0
+feast==0.36.0
+minio==7.2.0
+pyarrow==14.0.0
+pandas==2.1.0
+redis==5.0.1
+`},
+    {id:'r2',folder:'',name:'README.md',lang:'markdown',content:`# Pipeline Project
+
+PySpark ETL + Feast feature store.
+
+## Structure
+
+\`\`\`
+pipelines/    ETL scripts (Python + Bash)
+feast/        Feature store definitions
+config/       Settings & environment variables
+\`\`\`
+
+## Quickstart
+
+\`\`\`bash
+# 1. Copy env file and configure
+cp config/.env.example .env
+
+# 2. Run the pipeline
+bash pipelines/run.sh
+\`\`\`
+
+## Feast
+
+Apply feature definitions:
+
+\`\`\`bash
+feast apply
+feast materialize-incremental $(date -u +%Y-%m-%dT%H:%M:%S)
+\`\`\`
+
+## Notes
+
+- All Parquet output lands in **MinIO** at \`s3a://data-lake/\`
+- Feast registry is stored at \`s3a://data-lake/feast/registry.db\`
+- Streaming pipelines use **Kafka** topic \`click_events\`
+`},
+    // Demo files
+    {id:'d1',folder:'demo/pipelines',name:'customer_etl.py',lang:'python',demo:true,content:`# DEMO — safe to delete
+"""Customer ETL: PostgreSQL → clean → Parquet/MinIO."""
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.types import LongType, TimestampType
+
+spark = (SparkSession.builder.appName("CustomerETL").master("local[*]")
+    .config("spark.hadoop.fs.s3a.endpoint","http://minio:9000")
+    .config("spark.hadoop.fs.s3a.access.key","minioadmin")
+    .config("spark.hadoop.fs.s3a.secret.key","minioadmin")
+    .config("spark.hadoop.fs.s3a.path.style.access","true")
+    .getOrCreate())
+
+customers = (spark.read.format("jdbc")
+    .option("url","jdbc:postgresql://db:5432/crm")
+    .option("dbtable","public.customers")
+    .option("user","etl_user").option("password","secret").load())
+
+customers = (customers
+    .filter(F.col("status") != "DELETED")
+    .dropna(subset=["id","email"])
+    .withColumn("id", F.col("id").cast(LongType()))
+    .withColumn("email_hash", F.sha2(F.lower(F.trim(F.col("email"))),256))
+    .withColumn("created_at", F.col("created_at").cast(TimestampType()))
+    .drop("email","phone"))
+
+customers.write.mode("overwrite").option("compression","snappy").partitionBy("country").parquet("s3a://data-lake/customers/")
+print(f"[✓] {customers.count():,} rows written")
+spark.stop()
+`},
+    {id:'d2',folder:'demo/feast',name:'customer_features.py',lang:'python',demo:true,content:`# DEMO — safe to delete
+"""Full Feast feature view + service for customer domain."""
+from datetime import timedelta
+from feast import Entity, FeatureView, FeatureService, Field, FileSource
+from feast.data_format import ParquetFormat
+from feast.types import Float64, Int64, String, Bool
+
+customer = Entity(name="customer", join_keys=["customer_id"])
+source = FileSource(name="customer_parquet", path="s3a://data-lake/output/customers/",
+    file_format=ParquetFormat(), timestamp_field="created_at")
+
+profile_view = FeatureView(name="customer_profile", entities=[customer], ttl=timedelta(days=90),
+    schema=[
+        Field(name="country",           dtype=String),
+        Field(name="subscription_plan", dtype=String),
+        Field(name="is_active",         dtype=Bool),
+        Field(name="lifetime_value",    dtype=Float64),
+        Field(name="purchase_count",    dtype=Int64),
+    ],
+    online=True, source=source, tags={"tier":"gold"})
+
+churn_service = FeatureService(name="churn_prediction",
+    features=[profile_view[["country","subscription_plan","is_active","lifetime_value"]]],
+    tags={"model":"churn_v2"})
+`},
+  ]
+};
+
+// Separate JSON stores (domain-specific)
+const DEFAULT_STORES = {
+  feast: {
+    _description: "Feast feature store configuration",
+    project: "my-pipeline",
+    registry_path: "s3a://data-lake/feast/registry.db",
+    online_store: { type: "redis", connection_string: "redis:6379" },
+    offline_store: { type: "file" },
+    entities: [
+      { name: "user",     join_keys: ["user_id"],     description: "Platform user" },
+      { name: "customer", join_keys: ["customer_id"], description: "CRM customer" }
+    ],
+    feature_views: [
+      { name: "user_activity", ttl_days: 30, online: true, tier: "silver" },
+      { name: "user_profile",  ttl_days: 90, online: true, tier: "gold"   }
+    ]
+  },
+  config: {
+    _description: "Pipeline runtime configuration",
+    spark: { master: "local[*]", shuffle_partitions: 8, executor_memory: "2g" },
+    minio: { endpoint: "http://minio:9000", bucket: "data-lake", compression: "snappy" },
+    database: { host: "localhost", port: 5432, name: "mydb", schema: "public" },
+    kafka: { bootstrap_servers: "broker:9092", topics: { events: "click_events" } }
+  }
+};
+
+// ── State ───────────────────────────────────────────────────────
+const S = {
+  manifest: null,       // { project, files: [...] }
+  cache: {},            // id → content string
+  stores: {},           // { feast: {...}, config: {...} }
+  tabs: [],             // [{ id, name, folder, lang, dirty }]
+  active: null,         // active file id
+  editor: null,         // CodeMirror instance
+  mdEditor: null,       // CodeMirror for markdown editor side
+  toDelete: null,
+  termHistory: [], termIdx: -1,
+  activeStore: 'feast',
+  settings: { fontSize: 14, tabSize: 4, wrap: 'off' }
+};
+
+const LS = {
+  MANIFEST: 'pide_manifest',
+  CACHE:    'pide_cache',
+  STORES:   'pide_stores',
+  SETTINGS: 'pide_settings',
+  THEME:    'pide_theme'
+};
+
+// ── Persistence ─────────────────────────────────────────────────
+function loadState() {
+  // Manifest
+  try { S.manifest = JSON.parse(localStorage.getItem(LS.MANIFEST)); } catch {}
+  if (!S.manifest) {
+    S.manifest = { project: FACTORY.project, files: FACTORY.files.map(f => ({...f})) };
+  }
+  // Stores
+  try { S.stores = JSON.parse(localStorage.getItem(LS.STORES)); } catch {}
+  if (!S.stores) S.stores = JSON.parse(JSON.stringify(DEFAULT_STORES));
+  // Settings
+  try { Object.assign(S.settings, JSON.parse(localStorage.getItem(LS.SETTINGS))); } catch {}
+}
+function saveManifest() { localStorage.setItem(LS.MANIFEST, JSON.stringify(S.manifest)); }
+function saveStores()   { localStorage.setItem(LS.STORES,   JSON.stringify(S.stores)); }
+function saveSettings() { localStorage.setItem(LS.SETTINGS, JSON.stringify(S.settings)); }
+
+// ── File content ─────────────────────────────────────────────────
+function getContent(id) {
+  if (S.cache[id] !== undefined) return S.cache[id];
+  // Check localStorage edits
+  let edits = {};
+  try { edits = JSON.parse(localStorage.getItem(LS.CACHE) || '{}'); } catch {}
+  if (edits[id] !== undefined) { S.cache[id] = edits[id]; return S.cache[id]; }
+  // Factory default
+  const f = FACTORY.files.find(x => x.id === id);
+  S.cache[id] = f ? f.content : '';
+  return S.cache[id];
+}
+function setContent(id, content) {
+  S.cache[id] = content;
+  let edits = {};
+  try { edits = JSON.parse(localStorage.getItem(LS.CACHE) || '{}'); } catch {}
+  edits[id] = content;
+  localStorage.setItem(LS.CACHE, JSON.stringify(edits));
+}
+
+// ── File Tree ────────────────────────────────────────────────────
+const SECTIONS = [
+  { key:'pipelines', label:'Pipelines' },
+  { key:'feast',     label:'Feast' },
+  { key:'config',    label:'Config' },
+  { key:'',          label:'Root' },
+  { key:'demo',      label:'Demo',  demo:true }
+];
+
+function renderTree(filter = '') {
+  const lc = filter.toLowerCase();
+  const el = document.getElementById('fileTree');
+  el.innerHTML = '';
+
+  const groups = {};
+  S.manifest.files.forEach(f => {
+    if (lc && !f.name.toLowerCase().includes(lc)) return;
+    const top = f.folder ? f.folder.split('/')[0] : '';
+    (groups[top] = groups[top] || []).push(f);
+  });
+
+  // Demo sub-groups
+  const demoFiles = groups['demo'] || [];
+  delete groups['demo'];
+
+  SECTIONS.forEach(sec => {
+    const files = sec.key === 'demo' ? demoFiles : (groups[sec.key] || []);
+    if (!files.length) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'tree-sec';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'tree-sec-hdr';
+    hdr.innerHTML = `<span class="tree-chev">▾</span><span>${sec.label}</span><span class="tree-badge${sec.demo?' demo':''}">${files.length}</span>`;
+    hdr.onclick = () => { wrap.classList.toggle('closed'); };
+    wrap.appendChild(hdr);
+
+    const body = document.createElement('div');
+    body.className = 'tree-body';
+
+    if (sec.demo) {
+      const subs = {};
+      files.forEach(f => { const s = f.folder.replace('demo/','') || ''; (subs[s]=subs[s]||[]).push(f); });
+      Object.keys(subs).sort().forEach(s => {
+        if (s) {
+          const lbl = document.createElement('div');
+          lbl.style.cssText = 'font-size:10px;color:var(--t2);padding:5px 10px 2px 20px;letter-spacing:.5px';
+          lbl.textContent = s;
+          body.appendChild(lbl);
+        }
+        subs[s].forEach(f => body.appendChild(makeNode(f, 26)));
+      });
+      const rmBtn = document.createElement('button');
+      rmBtn.className = 'demo-rm';
+      rmBtn.textContent = '🗑 Remove all demo files';
+      rmBtn.onclick = removeAllDemo;
+      body.appendChild(rmBtn);
+    } else {
+      files.forEach(f => body.appendChild(makeNode(f, 10)));
+    }
+
+    wrap.appendChild(body);
+    el.appendChild(wrap);
+  });
+}
+
+function makeNode(f, indent) {
+  const el = document.createElement('div');
+  el.className = 'tree-node' + (f.id === S.active ? ' active' : '') + (f.demo ? ' demo' : '');
+  el.dataset.id = f.id;
+  el.style.paddingLeft = indent + 'px';
+  el.innerHTML =
+    `<span class="tree-icon">${fIcon(f.name)}</span>` +
+    `<span class="tree-name">${f.name}</span>` +
+    `<span class="tree-acts">` +
+      `<button class="tree-act" onclick="event.stopPropagation();renameFile('${f.id}')" title="Rename">✎</button>` +
+      `<button class="tree-act del" onclick="event.stopPropagation();askDelete('${f.id}')" title="Delete">✕</button>` +
+    `</span>`;
+  el.onclick = () => openFile(f.id);
+  return el;
+}
+
+function fIcon(n) {
+  const e = n.split('.').pop().toLowerCase();
+  return {py:'🐍',sh:'⬛',js:'🟨',ts:'🔷',json:'{}',yaml:'⚙️',yml:'⚙️',md:'📝',txt:'📄',env:'🔑',toml:'⚙️'}[e]||'📄';
+}
+function fLang(n) {
+  const e = n.split('.').pop().toLowerCase();
+  return {py:'python',sh:'shell',js:'javascript',ts:'javascript',json:'javascript',yaml:'yaml',yml:'yaml',md:'markdown'}[e]||'text';
+}
+
+function filterTree(v) { renderTree(v); }
+function refreshTree() { renderTree(); toast('Tree refreshed','info'); }
+
+// ── Editor init ──────────────────────────────────────────────────
+function initEditor() {
+  S.editor = CodeMirror.fromTextArea(document.getElementById('codeEditor'), {
+    theme:'dracula', lineNumbers:true, mode:'python',
+    indentUnit:4, tabSize:4, indentWithTabs:false,
+    autoCloseBrackets:true, matchBrackets:true, styleActiveLine:true,
+    lineWrapping:false,
+    extraKeys:{
+      'Tab': cm => cm.replaceSelection('    '),
+      'Ctrl-S': () => saveFile(),
+      'Cmd-S':  () => saveFile(),
+      'Ctrl-/': cm => cm.toggleComment(),
+      'Cmd-/':  cm => cm.toggleComment(),
+      'Ctrl-W': () => { if(S.active) closeTab(S.active); },
+    }
+  });
+  S.editor.on('change', () => { markDirty(); updateStatus(); });
+  S.editor.on('cursorActivity', updateStatus);
+
+  // Markdown editor
+  S.mdEditor = CodeMirror.fromTextArea(document.getElementById('mdEditor'), {
+    theme:'dracula', lineNumbers:true, mode:'markdown',
+    indentUnit:4, lineWrapping:true,
+    extraKeys:{ 'Ctrl-S': () => saveFile(), 'Cmd-S': () => saveFile() }
+  });
+  S.mdEditor.on('change', () => { markDirty(); syncMdPreview(); });
+}
+
+function applySetting(key, val) {
+  S.settings[key] = key === 'tabSize' || key === 'fontSize' ? parseInt(val) : val;
+  if (key === 'fontSize' && S.editor) {
+    S.editor.getWrapperElement().style.fontSize = val + 'px';
+    if (S.mdEditor) S.mdEditor.getWrapperElement().style.fontSize = val + 'px';
+  }
+  if (key === 'tabSize' && S.editor) { S.editor.setOption('indentUnit', parseInt(val)); S.editor.setOption('tabSize', parseInt(val)); }
+  if (key === 'wrap' && S.editor) S.editor.setOption('lineWrapping', val === 'on');
+  saveSettings();
+}
+
+function setProjectName(v) {
+  S.manifest.project = v || 'my-pipeline';
+  document.getElementById('tbProject').textContent = S.manifest.project;
+  saveManifest();
+}
+
+// ── Open file ────────────────────────────────────────────────────
+function openFile(id) {
+  // Flush current
+  if (S.active && S.active !== id) flushActive();
+
+  if (!S.tabs.find(t => t.id === id)) {
+    const meta = S.manifest.files.find(f => f.id === id);
+    if (!meta) return;
+    S.tabs.push({ id, name: meta.name, folder: meta.folder || '', lang: meta.lang || fLang(meta.name), dirty: false });
+  }
+  S.active = id;
+  renderTabs(); renderTree();
+
+  const meta = S.manifest.files.find(f => f.id === id);
+  const content = getContent(id);
+  const lang = meta.lang || fLang(meta.name);
+  const isMd = meta.name.endsWith('.md');
+
+  document.getElementById('statusBar').style.display = 'flex';
+  document.getElementById('saveBtn').disabled = false;
+  document.getElementById('statusLang').textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
+  document.getElementById('statusPath').textContent = meta.folder ? `${meta.folder}/${meta.name}` : meta.name;
+
+  if (isMd) {
+    document.getElementById('welcome').style.display    = 'none';
+    document.getElementById('editorWrap').style.display = 'none';
+    document.getElementById('mdSplit').style.display    = 'flex';
+    S.mdEditor.setOption('mode','markdown');
+    S.mdEditor.setValue(content);
+    S.mdEditor.clearHistory();
+    syncMdPreview();
+    setTimeout(() => { S.mdEditor.refresh(); S.mdEditor.focus(); }, 30);
+  } else {
+    document.getElementById('welcome').style.display    = 'none';
+    document.getElementById('mdSplit').style.display    = 'none';
+    document.getElementById('editorWrap').style.display = 'flex';
+    const cmMode = lang==='python'?'python':lang==='shell'?'shell':lang==='yaml'?'yaml':'javascript';
+    S.editor.setOption('mode', cmMode);
+    S.editor.setValue(content);
+    S.editor.clearHistory();
+    setTimeout(() => { S.editor.refresh(); S.editor.focus(); }, 30);
+  }
+}
+
+function flushActive() {
+  if (!S.active) return;
+  const meta = S.manifest.files.find(f => f.id === S.active);
+  if (!meta) return;
+  const isMd = meta.name.endsWith('.md');
+  const content = isMd ? S.mdEditor.getValue() : S.editor.getValue();
+  setContent(S.active, content);
+}
+
+// ── Markdown renderer ─────────────────────────────────────────────
+function syncMdPreview() {
+  const raw = S.mdEditor ? S.mdEditor.getValue() : '';
+  document.getElementById('mdPreview').innerHTML = renderMd(raw);
+}
+
+function renderMd(md) {
+  if (!md.trim()) return '<div class="md-empty">Nothing to preview yet…</div>';
+  let h = md
+    // code blocks
+    .replace(/```(\w*)\n([\s\S]*?)```/g, (_,lang,code) =>
+      `<pre><code class="lang-${lang}">${esc(code.trimEnd())}</code></pre>`)
+    // inline code
+    .replace(/`([^`]+)`/g, (_,c) => `<code>${esc(c)}</code>`)
+    // headings
+    .replace(/^######\s(.+)$/gm,'<h6>$1</h6>')
+    .replace(/^#####\s(.+)$/gm,'<h5>$1</h5>')
+    .replace(/^####\s(.+)$/gm,'<h4>$1</h4>')
+    .replace(/^###\s(.+)$/gm,'<h3>$1</h3>')
+    .replace(/^##\s(.+)$/gm,'<h2>$1</h2>')
+    .replace(/^#\s(.+)$/gm,'<h1>$1</h1>')
+    // blockquote
+    .replace(/^>\s(.+)$/gm,'<blockquote>$1</blockquote>')
+    // hr
+    .replace(/^---+$/gm,'<hr>')
+    // bold + italic
+    .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/__(.+?)__/g,'<strong>$1</strong>')
+    .replace(/_(.+?)_/g,'<em>$1</em>')
+    // links + images
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g,'<img alt="$1" src="$2">')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>')
+    // tables
+    .replace(/((?:\|.+\|\n)+)/g, tableBlock)
+    // unordered lists
+    .replace(/((?:^[-*+]\s.+\n?)+)/gm, m =>
+      '<ul>'+m.replace(/^[-*+]\s(.+)$/gm,'<li>$1</li>')+'</ul>')
+    // ordered lists
+    .replace(/((?:^\d+\.\s.+\n?)+)/gm, m =>
+      '<ol>'+m.replace(/^\d+\.\s(.+)$/gm,'<li>$1</li>')+'</ol>')
+    // paragraphs
+    .replace(/\n\n+/g,'</p><p>')
+    .replace(/\n/g,'<br>');
+  return '<p>' + h + '</p>';
+}
+
+function tableBlock(match) {
+  const rows = match.trim().split('\n').filter(r => r.trim());
+  let html = '<table>';
+  rows.forEach((row, i) => {
+    if (/^[\s|:-]+$/.test(row)) return; // separator row
+    const cells = row.split('|').filter((_,j,a) => j>0 && j<a.length-1);
+    const tag = i === 0 ? 'th' : 'td';
+    html += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
+  });
+  return html + '</table>';
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Tabs ─────────────────────────────────────────────────────────
+function renderTabs() {
+  const list = document.getElementById('tabList');
+  list.innerHTML = '';
+  S.tabs.forEach(t => {
+    const el = document.createElement('div');
+    el.className = 'tab' + (t.id === S.active ? ' active' : '');
+    el.innerHTML =
+      `<span class="tab-icon">${fIcon(t.name)}</span>` +
+      `<span>${t.name}</span>` +
+      (t.dirty ? `<span class="tab-dot"></span>` : '') +
+      `<button class="tab-x" onclick="event.stopPropagation();closeTab('${t.id}')">×</button>`;
+    el.onclick = () => openFile(t.id);
+    list.appendChild(el);
+  });
+  const cur = S.tabs.find(t => t.id === S.active);
+  const sb = document.getElementById('saveBtn');
+  if (cur) { sb.disabled = false; sb.classList.toggle('unsaved', cur.dirty); }
+  else { sb.disabled = true; sb.classList.remove('unsaved'); }
+  if (!S.tabs.length) showWelcome();
+}
+
+function markDirty() {
+  const t = S.tabs.find(x => x.id === S.active);
+  if (t && !t.dirty) { t.dirty = true; renderTabs(); }
+}
+
+function closeTab(id) {
+  flushActive();
+  S.tabs = S.tabs.filter(t => t.id !== id);
+  if (S.active === id) {
+    S.active = S.tabs.length ? S.tabs[S.tabs.length-1].id : null;
+    if (S.active) openFile(S.active); else showWelcome();
+  } else renderTabs();
+  renderTree();
+}
+
+function closeAllTabs() {
+  if (S.active) flushActive();
+  S.tabs = []; S.active = null;
+  showWelcome(); renderTree();
+}
+
+function showWelcome() {
+  document.getElementById('welcome').style.display    = 'flex';
+  document.getElementById('editorWrap').style.display = 'none';
+  document.getElementById('mdSplit').style.display    = 'none';
+  document.getElementById('statusBar').style.display  = 'none';
+  document.getElementById('saveBtn').disabled = true;
+  document.getElementById('saveBtn').classList.remove('unsaved');
+  renderTabs();
+}
+
+function saveFile() {
+  if (!S.active) return;
+  flushActive();
+  const t = S.tabs.find(x => x.id === S.active);
+  if (t) { t.dirty = false; renderTabs(); }
+  const meta = S.manifest.files.find(f => f.id === S.active);
+  toast(`Saved ${meta?.name || ''}`, 'ok');
+}
+
+function updateStatus() {
+  if (!S.editor) return;
+  const c = S.editor.getCursor();
+  document.getElementById('cursorPos').textContent = `Ln ${c.line+1}, Col ${c.ch+1}`;
+}
+
+// ── CRUD ─────────────────────────────────────────────────────────
+const TEMPLATES = {
+  empty: '',
+  python: `# Pipeline script\nfrom pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName("job").master("local[*]").getOrCreate()\nspark.sparkContext.setLogLevel("WARN")\n\n# your code here\n\nspark.stop()\n`,
+  pipeline: `#!/usr/bin/env python3\n"""ETL Pipeline"""\nfrom pyspark.sql import SparkSession\nfrom pyspark.sql import functions as F\nfrom pyspark.sql.types import DoubleType\n\nspark = (\n    SparkSession.builder.appName("PipelineJob").master("local[*]")\n    .config("spark.hadoop.fs.s3a.endpoint",          "http://minio:9000")\n    .config("spark.hadoop.fs.s3a.access.key",        "minioadmin")\n    .config("spark.hadoop.fs.s3a.secret.key",        "minioadmin")\n    .config("spark.hadoop.fs.s3a.path.style.access", "true")\n    .getOrCreate()\n)\n\ndf = spark.read.format("jdbc").option("url","jdbc:postgresql://localhost:5432/mydb").option("dbtable","public.events").option("user","postgres").option("password","secret").load()\ndf = df.filter(F.col("status") != "DELETED").dropna(subset=["id"])\ndf.write.mode("overwrite").option("compression","snappy").parquet("s3a://data-lake/output/")\nspark.stop()\n`,
+  feast_ds: `"""Feast — Data Source"""\nfrom feast import FileSource\nfrom feast.data_format import ParquetFormat\n\nmy_source = FileSource(\n    name="my_source",\n    path="s3a://data-lake/output/my_table/",\n    file_format=ParquetFormat(),\n    timestamp_field="created_at",\n)\n`,
+  feast_fv: `"""Feast — Feature View"""\nfrom datetime import timedelta\nfrom feast import Entity, FeatureView, Field\nfrom feast.types import Float64, Int64, String\nfrom .data_sources import my_source\n\nmy_entity = Entity(name="user", join_keys=["user_id"])\n\nmy_view = FeatureView(\n    name="my_features",\n    entities=[my_entity],\n    ttl=timedelta(days=30),\n    schema=[\n        Field(name="feature_a", dtype=Float64),\n        Field(name="feature_b", dtype=Int64),\n    ],\n    online=True,\n    source=my_source,\n)\n`,
+  feast_fs: `"""Feast — Feature Service"""\nfrom feast import FeatureService\nfrom .feature_views import my_view\n\nmy_service = FeatureService(\n    name="my_model_v1",\n    features=[my_view[["feature_a","feature_b"]]],\n    tags={"model":"my_model","version":"1"},\n)\n`,
+  feast_entity: `"""Feast — Entity definitions"""\nfrom feast import Entity\n\nuser = Entity(name="user", join_keys=["user_id"], description="Platform user")\ncustomer = Entity(name="customer", join_keys=["customer_id"], description="CRM customer")\n`,
+  json: `{\n  "version": "1.0",\n  "config": {}\n}\n`,
+  yaml: `# Configuration\nversion: "1.0"\n\nsettings:\n  key: value\n`,
+  bash: `#!/usr/bin/env bash\nset -euo pipefail\n\necho "[INFO] Starting..."\n\n# your commands here\n\necho "[INFO] Done."\n`,
+  readme: `# Project Title\n\nBrief description of what this does.\n\n## Setup\n\n\`\`\`bash\n# installation steps\n\`\`\`\n\n## Usage\n\n\`\`\`bash\n# usage example\n\`\`\`\n\n## Notes\n\n- Note one\n- Note two\n`
+};
+
+function createFile() {
+  const folder  = document.getElementById('nfFolder').value;
+  const name    = document.getElementById('nfName').value.trim();
+  const tpl     = document.getElementById('nfTpl').value;
+  const overide = document.getElementById('nfContent').value;
+  if (!name) { toast('Enter a file name','err'); return; }
+
+  const id = 'u_' + Date.now();
+  const lang = fLang(name);
+  const content = overide.trim() || TEMPLATES[tpl] || '';
+
+  S.manifest.files.push({ id, folder, name, lang });
+  saveManifest();
+  setContent(id, content);
+
+  renderTree();
+  closeModal('newFileModal');
+  document.getElementById('nfName').value = '';
+  document.getElementById('nfContent').value = '';
+  openFile(id);
+  toast(`Created ${name}`, 'ok');
+}
+
+function renameFile(id) {
+  const meta = S.manifest.files.find(f => f.id === id);
+  if (!meta) return;
+  const n = prompt('Rename to:', meta.name);
+  if (!n || n === meta.name) return;
+  meta.name = n; meta.lang = fLang(n);
+  saveManifest();
+  const t = S.tabs.find(x => x.id === id);
+  if (t) { t.name = n; t.lang = fLang(n); renderTabs(); }
+  renderTree();
+  toast(`Renamed to ${n}`, 'ok');
+}
+
+function askDelete(id) {
+  const meta = S.manifest.files.find(f => f.id === id);
+  if (!meta) return;
+  S.toDelete = id;
+  document.getElementById('deleteLabel').textContent = (meta.folder ? `${meta.folder}/` : '') + meta.name;
+  openModal('deleteModal');
+}
+
+function confirmDelete() {
+  const id = S.toDelete;
+  S.manifest.files = S.manifest.files.filter(f => f.id !== id);
+  saveManifest();
+  let edits = {}; try { edits = JSON.parse(localStorage.getItem(LS.CACHE)||'{}'); } catch {}
+  delete edits[id]; localStorage.setItem(LS.CACHE, JSON.stringify(edits));
+  delete S.cache[id];
+  closeTab(id);
+  renderTree();
+  closeModal('deleteModal');
+  toast('File deleted', 'info');
+}
+
+function removeAllDemo() {
+  const ids = S.manifest.files.filter(f => f.demo).map(f => f.id);
+  ids.forEach(id => {
+    S.manifest.files = S.manifest.files.filter(f => f.id !== id);
+    let edits={}; try{edits=JSON.parse(localStorage.getItem(LS.CACHE)||'{}')}catch{}
+    delete edits[id]; localStorage.setItem(LS.CACHE, JSON.stringify(edits));
+    delete S.cache[id];
+    S.tabs = S.tabs.filter(t => t.id !== id);
+    if (S.active === id) S.active = null;
+  });
+  saveManifest();
+  if (!S.active) showWelcome();
+  renderTree();
+  toast(`Removed ${ids.length} demo files`, 'info');
+}
+
+// ── ZIP Export ───────────────────────────────────────────────────
+function openZipModal() {
+  const list = document.getElementById('zipFileList');
+  list.innerHTML = '';
+  S.manifest.files.forEach(f => {
+    const path = (f.folder ? f.folder+'/' : '') + f.name;
+    const content = getContent(f.id);
+    const size = content.length;
+    const item = document.createElement('div');
+    item.className = 'zip-item';
+    item.innerHTML =
+      `<input type="checkbox" class="zip-item-check" data-id="${f.id}" checked>` +
+      `<span class="zip-item-path">${path}</span>` +
+      `<span class="zip-item-size">${(size/1024).toFixed(1)} KB</span>`;
+    list.appendChild(item);
+  });
+}
+
+function zipSelectAll(v) {
+  document.querySelectorAll('.zip-item-check').forEach(c => c.checked = v);
+}
+function zipSelectNonDemo() {
+  document.querySelectorAll('.zip-item-check').forEach(c => {
+    const id = c.dataset.id;
+    const meta = S.manifest.files.find(f => f.id === id);
+    c.checked = !meta?.demo;
+  });
+}
+
+async function buildZip() {
+  if (typeof JSZip === 'undefined') { toast('JSZip not loaded — need internet connection','err'); return; }
+  const zip = new JSZip();
+  const zipName = document.getElementById('zipName').value || 'pipeline.zip';
+
+  // Selected files
+  document.querySelectorAll('.zip-item-check:checked').forEach(c => {
+    const id = c.dataset.id;
+    const meta = S.manifest.files.find(f => f.id === id);
+    if (!meta) return;
+    const path = (meta.folder ? meta.folder+'/' : '') + meta.name;
+    zip.file(path, getContent(id));
+  });
+
+  // JSON stores
+  if (document.getElementById('zipIncFeast').checked) {
+    zip.file('stores/feast.json', JSON.stringify(S.stores.feast||{}, null, 2));
+  }
+  if (document.getElementById('zipIncConfig').checked) {
+    zip.file('stores/config.json', JSON.stringify(S.stores.config||{}, null, 2));
+  }
+  if (document.getElementById('zipIncManifest').checked) {
+    const manifest = { project: S.manifest.project, files: S.manifest.files.map(f => ({
+      id:f.id, folder:f.folder, name:f.name, lang:f.lang, demo:f.demo
+    }))};
+    zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+  }
+
+  const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:6} });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = zipName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  closeModal('zipModal');
+  toast(`ZIP created: ${zipName}`, 'ok');
+}
+
+// ── JSON Stores ──────────────────────────────────────────────────
+const STORE_DEFS = [
+  { key:'feast',  label:'Feast',  icon:'🍽' },
+  { key:'config', label:'Config', icon:'⚙️' },
+];
+let storeChanged = false;
+
+function openStoreModal() {
+  const tabs = document.getElementById('storeTabs');
+  tabs.innerHTML = '';
+  STORE_DEFS.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'store-tab' + (d.key === S.activeStore ? ' active' : '');
+    btn.textContent = `${d.icon} ${d.label}`;
+    btn.onclick = () => switchStore(d.key);
+    tabs.appendChild(btn);
+  });
+  loadStoreEditor(S.activeStore);
+}
+
+function switchStore(key) {
+  if (storeChanged) { if (!confirm('Save current store before switching?')) return; saveStore(); }
+  S.activeStore = key;
+  document.querySelectorAll('.store-tab').forEach(t => t.classList.toggle('active', t.textContent.includes(key.charAt(0).toUpperCase()+key.slice(1))));
+  loadStoreEditor(key);
+}
+
+function loadStoreEditor(key) {
+  const data = S.stores[key] || {};
+  document.getElementById('storeEditor').value = JSON.stringify(data, null, 2);
+  document.getElementById('storeError').style.display = 'none';
+  storeChanged = false;
+}
+
+function storeEditorChanged() {
+  storeChanged = true;
+  document.getElementById('storeError').style.display = 'none';
+}
+
+function saveStore() {
+  const raw = document.getElementById('storeEditor').value;
+  try {
+    S.stores[S.activeStore] = JSON.parse(raw);
+    saveStores();
+    storeChanged = false;
+    document.getElementById('storeError').style.display = 'none';
+    toast(`${S.activeStore} store saved`, 'ok');
+  } catch(e) {
+    const err = document.getElementById('storeError');
+    err.textContent = '⚠ Invalid JSON: ' + e.message;
+    err.style.display = 'block';
+  }
+}
+
+// ── Terminal ─────────────────────────────────────────────────────
+function toggleTerminal(force) {
+  const el = document.getElementById('terminal');
+  const open = force !== undefined ? force : el.style.display === 'none';
+  el.style.display = open ? 'flex' : 'none';
+  if (open) document.getElementById('termInp').focus();
+}
+function clearTerm() { document.getElementById('termOut').innerHTML = ''; }
+function switchTermTab(tab) {
+  document.querySelectorAll('.term-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+}
+function tLine(text, cls='') {
+  const out = document.getElementById('termOut');
+  const el = document.createElement('span');
+  el.className = 'tl ' + cls;
+  el.textContent = text + '\n';
+  out.appendChild(el);
+  out.scrollTop = out.scrollHeight;
+}
+function handleTermKey(e) {
+  const inp = e.target;
+  if (e.key === 'ArrowUp') { if (S.termIdx < S.termHistory.length-1) inp.value = S.termHistory[++S.termIdx]; return; }
+  if (e.key === 'ArrowDown') { S.termIdx=Math.max(-1,S.termIdx-1); inp.value=S.termIdx>=0?S.termHistory[S.termIdx]:''; return; }
+  if (e.key !== 'Enter') return;
+  const raw = inp.value.trim(); if (!raw) return;
+  inp.value = ''; S.termHistory.unshift(raw); S.termIdx = -1;
+  tLine('$ ' + raw, 'cmd');
+  const [cmd,...args] = raw.split(/\s+/);
+  switch(cmd) {
+    case 'help': tLine('Commands: help, ls, cat <file>, clear, export, stores','dim'); break;
+    case 'ls':   tLine(S.manifest.files.map(f=>(f.folder?f.folder+'/':'')+f.name).join('  '),'info'); break;
+    case 'cat': {
+      const n=args[0]; const meta=S.manifest.files.find(f=>f.name===n||(f.folder?`${f.folder}/${f.name}`:f.name)===n);
+      if (!meta){tLine(`cat: ${n}: no such file`,'err');break;}
+      tLine(getContent(meta.id)||'(empty)','dim'); break;
+    }
+    case 'clear': clearTerm(); break;
+    case 'export': exportSnapshot(); break;
+    case 'stores': tLine(JSON.stringify(Object.keys(S.stores)),'info'); break;
+    default: tLine(`bash: ${cmd}: command not found`,'err');
+  }
+}
+function exportSnapshot() {
+  const snap = { project:S.manifest.project, exported:new Date().toISOString(),
+    files: S.manifest.files.map(m=>({...m,content:getContent(m.id)})),
+    stores: S.stores };
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([JSON.stringify(snap,null,2)],{type:'application/json'})),
+    download: `${S.manifest.project}-snapshot.json`
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('Snapshot downloaded','ok');
+}
+
+// ── Theme ────────────────────────────────────────────────────────
+function toggleTheme() {
+  const n = document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme', n);
+  document.getElementById('themeBtn').textContent = n==='dark'?'☀️':'🌙';
+  if (S.editor)   S.editor.setOption('theme', n==='dark'?'dracula':'default');
+  if (S.mdEditor) S.mdEditor.setOption('theme', n==='dark'?'dracula':'default');
+  localStorage.setItem(LS.THEME, n);
+}
+
+// ── Modals ────────────────────────────────────────────────────────
+function openModal(id) {
+  if (id==='zipModal')   openZipModal();
+  if (id==='storeModal') openStoreModal();
+  if (id==='settingsModal') {
+    document.getElementById('sProject').value  = S.manifest.project||'';
+    document.getElementById('sFontSize').value = S.settings.fontSize||14;
+    document.getElementById('sTabSize').value  = S.settings.tabSize||4;
+    document.getElementById('sWrap').value     = S.settings.wrap||'off';
+  }
+  document.getElementById(id).classList.add('show');
+  document.getElementById(id).onclick = ev => { if (ev.target.id===id) closeModal(id); };
+}
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// ── Toasts ────────────────────────────────────────────────────────
+function toast(msg, type='info', ms=3000) {
+  const icons = {ok:'✓',err:'✕',info:'i',warn:'!'};
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span style="font-weight:700">${icons[type]||'i'}</span><span>${msg}</span>`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(()=>{ el.style.animation='tOut .2s ease forwards'; setTimeout(()=>el.remove(),210); }, ms);
+}
+
+// ── Global Keys ───────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') document.querySelectorAll('.overlay.show').forEach(m=>m.classList.remove('show'));
+  if ((e.ctrlKey||e.metaKey)&&e.key==='s') { e.preventDefault(); saveFile(); }
+  if ((e.ctrlKey||e.metaKey)&&e.key==='`') { e.preventDefault(); toggleTerminal(); }
+  if ((e.ctrlKey||e.metaKey)&&e.key==='w') { e.preventDefault(); if(S.active) closeTab(S.active); }
+  if ((e.ctrlKey||e.metaKey)&&e.key==='n') { e.preventDefault(); openModal('newFileModal'); }
+});
+
+// ── Boot ──────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Theme
+  const t = localStorage.getItem(LS.THEME)||'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('themeBtn').textContent = t==='dark'?'☀️':'🌙';
+
+  loadState();
+  document.getElementById('tbProject').textContent = S.manifest.project||'my-pipeline';
+  initEditor();
+
+  // Apply saved font size
+  if (S.settings.fontSize !== 14) {
+    S.editor.getWrapperElement().style.fontSize = S.settings.fontSize+'px';
+    S.mdEditor.getWrapperElement().style.fontSize = S.settings.fontSize+'px';
+  }
+  if (S.settings.wrap === 'on') S.editor.setOption('lineWrapping', true);
+
+  renderTree();
+
+  // Auto-open README
+  const readme = S.manifest.files.find(f => f.name === 'README.md');
+  if (readme) openFile(readme.id);
+
+  // Terminal boot message
+  tLine('Pipeline IDE — ready', 'ok');
+  tLine('Type "help" for commands', 'dim');
+});
+</script>
+</body>
+</html>
